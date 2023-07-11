@@ -1,24 +1,18 @@
 {
-	"name" : "Top Sites",
-	"i18n_name" : "top_sites",
+	"name" : "Alerted Domains",
+	"i18n_name" : "alerted_domains",
 	"data_source" : "flows",
 	"show_in_page" : "overview",
-	"visualization_type" : "table",
 	"hourly": false,
+	"visualization_type" : "table",
 	"select" : {
 		"items" : [
 			{
 				"name" : "INFO"
 			},
 			{
-				"name" : "Volume",
-				"func" : "SUM",
-				"param" : "TOTAL_BYTES",
-				"value_type" : "number"
-			},
-			{
-				"name" : "Hits",
-				"func" : "count",
+				"name" : "count",
+				"func" : "COUNT",
 				"param" : "*",
 				"value_type" : "number"
 			}
@@ -27,10 +21,17 @@
 	"filters" : {
 		"items" : [
 			{
+				"name": "STATUS",
+				"op": "neq",
+				"value": 0,
+				"value_type": "number",
+				"input": "fixed"
+			},
+			{
 				"name": "INFO",
 				"op": "neq",
 				"value": "",
-				"value_type": "text",
+				"value_type": "string",
 				"input": "fixed"
 			}
 		]
@@ -45,11 +46,7 @@
 	"sortby" : {
 		"items" : [
 			{
-				"name" : "Hits",
-				"order" : "DESC"
-			},
-			{
-				"name" : "Volume",
+				"name" : "count",
 				"order" : "DESC"
 			}
 		]

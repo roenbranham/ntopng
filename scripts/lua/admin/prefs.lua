@@ -468,42 +468,6 @@ if auth.has_capability(auth.capabilities.preferences) then
 
     -- ================================================================================
 
-    function printDataRetention()
-        print('<form method="post">')
-        print('<table class="table">')
-
-        print('<thead class="table-primary"><tr><th colspan=2 class="info">' .. i18n("prefs.data_retention") ..
-                  '</th></tr></thead>')
-
-        prefsInputFieldPrefs(subpage_active.entries["flow_data_retention"].title,
-            subpage_active.entries["flow_data_retention"].description, "ntopng.prefs.",
-            "flows_and_alerts_data_retention_days", data_retention_utils.getDefaultRetention(), "number", nil, nil, nil,
-            {
-                min = 1,
-                max = 365 * 10
-            })
-
-        
-
-        prefsInputFieldPrefs(subpage_active.entries["ts_data_retention"].title,
-            subpage_active.entries["ts_data_retention"].description, "ntopng.prefs.",
-            "ts_and_stats_data_retention_days", data_retention_utils.getDefaultRetention(), "number", nil, nil, nil, {
-                min = 1,
-                max = 365 * 10
-            })
-
-        print(
-            '<tr><th colspan=2 style="text-align:right;"><button type="submit" class="btn btn-primary" style="width:115px" disabled="disabled">' ..
-                i18n("save") .. '</button></th></tr>')
-        print('</table>')
-        print [[<input name="csrf" type="hidden" value="]]
-        print(ntop.getRandomCSRFValue())
-        print [[" />
-    </form>]]
-    end
-
-    -- ================================================================================
-
     -- #####################
 
     local function printMenuEntriesPrefs()
@@ -886,10 +850,8 @@ if auth.has_capability(auth.capabilities.preferences) then
         -- RADIUS GUI authentication
 
         local elementToSwitch = {"row_toggle_radius_accounting", "radius_admin_group",
-                                 "radius_unpriv_capabilties_group", "radius_server_address", "radius_secret",
-                                 "row_radius_auth_proto"}
-
-        local showElements = (ntop.getPref("ntopng.prefs.radius.auth_enabled") == "1")
+                                 "radius_unpriv_capabilties_group", "radius_server_address", "radius_acct_server_address",
+                                 "radius_secret", "row_radius_auth_proto"}
 
         prefsToggleButton(subpage_active, {
             field = auth_toggles.radius,
@@ -899,31 +861,11 @@ if auth.has_capability(auth.capabilities.preferences) then
         })
 
         -- RADIUS traffic accounting
-        local accountingElements = {"radius_acct_server_address"}
-
-        prefsToggleButton(subpage_active, {
-            field = "toggle_radius_accounting",
-            pref = "radius.accounting_enabled",
-            default = "0",
-            to_switch = accountingElements
-        })
-
+        local showElements = (ntop.getPref("ntopng.prefs.radius.auth_enabled") == "1")
         -- RADIUS server settings (used for both RADIUS auth and accountign)
         prefsInputFieldPrefs(subpage_active.entries["radius_server"].title,
             subpage_active.entries["radius_server"].description, "ntopng.prefs.radius", "radius_server_address",
             "127.0.0.1:1812", nil, showElements, true, false, {
-                attributes = {
-                    spellcheck = "false",
-                    maxlength = 255,
-                    required = "required",
-                    pattern = "[0-9.\\-A-Za-z]+:[0-9]+"
-                }
-            })
-
-        -- RADIUS server settings (used for both RADIUS auth and accountign)
-        prefsInputFieldPrefs(subpage_active.entries["radius_accounting_server"].title,
-            subpage_active.entries["radius_accounting_server"].description, "ntopng.prefs.radius",
-            "radius_acct_server_address", "127.0.0.1:1813", nil, showElements, true, false, {
                 attributes = {
                     spellcheck = "false",
                     maxlength = 255,
@@ -967,6 +909,29 @@ if auth.has_capability(auth.capabilities.preferences) then
                     spellcheck = "false",
                     maxlength = 255,
                     pattern = "[^\\s]+"
+                }
+            })
+
+        local accountingElements = {"radius_acct_server_address"}
+
+        prefsToggleButton(subpage_active, {
+            field = "toggle_radius_accounting",
+            pref = "radius.accounting_enabled",
+            default = "0",
+            to_switch = accountingElements,
+            hidden = not showElements
+        })
+        local showElementsAccounting = (ntop.getPref("ntopng.prefs.radius.accounting_enabled") == "1")
+
+        -- RADIUS server settings (used for both RADIUS auth and accountign)
+        prefsInputFieldPrefs(subpage_active.entries["radius_accounting_server"].title,
+            subpage_active.entries["radius_accounting_server"].description, "ntopng.prefs.radius",
+            "radius_acct_server_address", "127.0.0.1:1813", nil, showElements and showElementsAccounting, true, false, {
+                attributes = {
+                    spellcheck = "false",
+                    maxlength = 255,
+                    required = "required",
+                    pattern = "[0-9.\\-A-Za-z]+:[0-9]+"
                 }
             })
     end
@@ -1515,7 +1480,15 @@ if auth.has_capability(auth.capabilities.preferences) then
             subpage_active.entries["influxdb_query_timeout"].description, "ntopng.prefs.", "influx_query_timeout", "10",
             "number", influx_active, nil, nil, {
                 min = 1
+            })        
+            
+        prefsInputFieldPrefs(subpage_active.entries["ts_data_retention"].title,
+            subpage_active.entries["ts_data_retention"].description, "ntopng.prefs.",
+            "ts_and_stats_data_retention_days", data_retention_utils.getDefaultRetention(), "number", nil, nil, nil, {
+                min = 1,
+                max = 365 * 10
             })
+
 
         print('<thead class="table-primary"><tr><th colspan=2 class="info">' .. i18n('prefs.interfaces_timeseries') ..
                   '</th></tr></thead>')
@@ -1930,6 +1903,15 @@ if auth.has_capability(auth.capabilities.preferences) then
 
     local showAggregateFlowsPrefs = ntop.isEnterpriseXL() and ntop.isClickHouseEnabled()
 
+    prefsInputFieldPrefs(subpage_active.entries["flow_data_retention"].title,
+    subpage_active.entries["flow_data_retention"].description, "ntopng.prefs.",
+    "flows_and_alerts_data_retention_days", data_retention_utils.getDefaultRetention(), "number", nil, nil, nil,
+    {
+        min = 1,
+        max = 365 * 10
+    })
+
+
     prefsInputFieldPrefs(subpage_active.entries["aggregated_flows_data_retention"].title,
             subpage_active.entries["aggregated_flows_data_retention"].description, "ntopng.prefs.",
             "aggregated_flows_data_retention_days", data_retention_utils.getAggregatedFlowsDataRetention(), "number",
@@ -2054,10 +2036,6 @@ if auth.has_capability(auth.capabilities.preferences) then
 
     if (tab == "traffic_behaviour") then
         printNetworkBehaviour()
-    end
-
-    if (tab == "retention") then
-        printDataRetention()
     end
 
     if (tab == "misc") then

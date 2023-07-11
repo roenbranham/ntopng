@@ -102,7 +102,7 @@ Flow::Flow(NetworkInterface *_iface, u_int16_t _vlanId,
   memset(&protos, 0, sizeof(protos));
   memset(&flow_device, 0, sizeof(flow_device));
 
-  flow_score = 0, rtp_stream_type = rtp_unknown;
+  flow_score = 0, rtp_stream_type = ndpi_multimedia_unknown_flow;
 
   cli_ip_addr = srv_ip_addr = NULL;
   cli_host = srv_host = NULL;
@@ -895,17 +895,17 @@ void Flow::processExtraDissectedInformation() {
   /* Read this data before freeing nDPI */
   if(get_ndpi_flow()
      && (ndpi_get_upper_proto(get_detected_protocol()) == NDPI_PROTOCOL_SKYPE_TEAMS_CALL)) {
-    switch(get_ndpi_flow()->flow_type) {
+    switch(get_ndpi_flow()->flow_multimedia_type) {
     case ndpi_multimedia_audio_flow:
-      setRTPStreamType(rtp_audio);
+      setRTPStreamType(ndpi_multimedia_audio_flow);
       break;
 
     case ndpi_multimedia_video_flow:
-      setRTPStreamType(rtp_video);
+      setRTPStreamType(ndpi_multimedia_video_flow);
       break;
 
     case ndpi_multimedia_screen_sharing_flow:
-      setRTPStreamType(rtp_screen_share);
+      setRTPStreamType(ndpi_multimedia_screen_sharing_flow);
       break;
 
     default:
@@ -1650,16 +1650,18 @@ bool Flow::dump(time_t t, bool last_dump_before_free) {
 
   if (!ntop->getPrefs()->is_tiny_flows_export_enabled() && isTiny()) {
 #ifdef TINY_FLOWS_DEBUG
+    char buf[256];
     ntop->getTrace()->traceEvent(
         TRACE_NORMAL,
         "Skipping tiny flow dump "
         "[flow key: %u]"
         "[packets current/max: %i/%i] "
-        "[bytes current/max: %i/%i].",
+        "[bytes current/max: %i/%i]"
+        ": %s",
         key(), get_packets(),
         ntop->getPrefs()->get_max_num_packets_per_tiny_flow(), get_bytes(),
-        ntop->getPrefs()->get_max_num_bytes_per_tiny_flow());
-
+        ntop->getPrefs()->get_max_num_bytes_per_tiny_flow(),
+        print(buf, sizeof(buf)));
 #endif
     return (rc);
   }
@@ -2877,22 +2879,18 @@ void Flow::lua(lua_State *vm, AddressTree *ptree, DetailsLevel details_level,
     lua_push_int32_table_entry(vm, "flow_verdict", flow_verdict);
     lua_push_bool_table_entry(vm, "periodic_flow",
                               is_periodic_flow ? true : false);
-
-    if (rtp_stream_type != rtp_unknown) {
+    
+    if (rtp_stream_type != ndpi_multimedia_unknown_flow) {
       switch (rtp_stream_type) {
-        case rtp_audio:
+        case ndpi_multimedia_audio_flow:
           lua_push_str_table_entry(vm, "rtp_stream_type", "audio");
           break;
 
-        case rtp_video:
+        case ndpi_multimedia_video_flow:
           lua_push_str_table_entry(vm, "rtp_stream_type", "video");
           break;
 
-        case rtp_audio_video:
-          lua_push_str_table_entry(vm, "rtp_stream_type", "audio_video");
-          break;
-
-        case rtp_screen_share:
+        case ndpi_multimedia_screen_sharing_flow:
           lua_push_str_table_entry(vm, "rtp_stream_type", "screen_share");
           break;
 
@@ -3674,10 +3672,7 @@ void Flow::formatSyslogFlow(json_object *my_object) {
 /* *************************************** */
 
 void Flow::formatGenericFlow(json_object *my_object) {
-  char buf[64], jsonbuf[64];
-#ifdef FULL_SERIALIZATION
-  char *c;
-#endif
+  char buf[64], jsonbuf[64], *c;
   u_char community_id[200];
   const IpAddress *cli_ip = get_cli_ip_addr(), *srv_ip = get_srv_ip_addr();
 
@@ -3886,6 +3881,36 @@ void Flow::formatGenericFlow(json_object *my_object) {
         json_object_new_double(toMs(&serverNwLatency)));
   }
 
+  c = cli_host ? cli_host->get_country(buf, sizeof(buf)) : NULL;
+  if(c) {
+    json_object *location = json_object_new_array();
+
+    json_object_object_add(my_object, "SRC_IP_COUNTRY", json_object_new_string(c));
+    if(location && cli_host) {
+      float latitude, longitude;
+
+      cli_host->get_geocoordinates(&latitude, &longitude);
+      json_object_array_add(location, json_object_new_double(longitude));
+      json_object_array_add(location, json_object_new_double(latitude));
+      json_object_object_add(my_object, "SRC_IP_LOCATION", location);
+    }
+  }
+
+  c = srv_host ? srv_host->get_country(buf, sizeof(buf)) : NULL;
+  if(c) {
+    json_object *location = json_object_new_array();
+
+    json_object_object_add(my_object, "DST_IP_COUNTRY", json_object_new_string(c));
+    if(location && srv_host) {
+      float latitude, longitude;
+
+      srv_host->get_geocoordinates(&latitude, &longitude);
+      json_object_array_add(location, json_object_new_double(longitude));
+      json_object_array_add(location, json_object_new_double(latitude));
+      json_object_object_add(my_object, "DST_IP_LOCATION", location);
+    }
+  }
+  
 #ifdef FULL_SERIALIZATION
   if (ntop->getPrefs() && ntop->getPrefs()->get_instance_name())
     json_object_object_add(
@@ -4468,8 +4493,9 @@ void Flow::housekeep(time_t t) {
       if (!is_swap_requested() /* Swap not requested */
           || (is_swap_requested() &&
               !is_swap_done())) /* Or requested but never performed (no more
-                                   packets seen) */
+                                   packets seen) */ {
         iface->execFlowEndChecks(this);
+      }
 
       dumpCheck(t, true /* LAST dump before delete */);
 
@@ -7805,7 +7831,8 @@ bool Flow::setAlertsBitmap(FlowAlertType alert_type, u_int16_t cli_inc,
   if (async && alerts_map.isSetBit(alert_type.id)) {
 #ifdef DEBUG_SCORE
     ntop->getTrace()->traceEvent(TRACE_NORMAL,
-                                 "Discarding alert (already set)");
+        "[%s] Discarding alert type %u (already set)",
+        iface->get_name(), alert_type.id);
 #endif
     return false;
   }
@@ -7848,13 +7875,14 @@ bool Flow::setAlertsBitmap(FlowAlertType alert_type, u_int16_t cli_inc,
      || getPredominantAlertScore() < flow_inc /* The score of the current alerted alert_type is less than the score of this alert_type */) {
 #ifdef DEBUG_SCORE
     ntop->getTrace()->traceEvent(
-        TRACE_NORMAL, "Setting predominant with score: %u", flow_inc);
+        TRACE_NORMAL, "[%s] Setting predominant alert (%u) with score %u",
+        iface->get_name(), alert_type.id, flow_inc);
 #endif
     setPredominantAlert(alert_type, flow_inc);
 #ifdef DEBUG_SCORE
   } else {
-    ntop->getTrace()->traceEvent(TRACE_NORMAL, "Discarding alert (score <= %u)",
-                                 getPredominantAlertScore());
+    ntop->getTrace()->traceEvent(TRACE_NORMAL, "[%s] Discarding alert (%u) [score %u <= %u]",
+        iface->get_name(), alert_type.id, flow_inc, getPredominantAlertScore());
 #endif
   }
 
@@ -8228,3 +8256,18 @@ bool Flow::isDPIDetectedFlow() {
     return(false);
   }
 }
+
+/* **************************************************** */
+
+bool Flow::matchFlowIP(IpAddress *ip, u_int16_t vlan_id) {
+  if(get_vlan_id() != vlan_id) return(false);
+  
+  if((!get_cli_ip_addr()) || (!get_srv_ip_addr()))
+    return(false);
+  
+  if(get_cli_ip_addr()->equal(ip) || get_srv_ip_addr()->equal(ip))
+    return(true);
+  else
+    return(false);
+}
+

@@ -279,7 +279,8 @@ function tsArrayToOptions(tsOptionsArray, tsGroupsArray, tsCompare) {
 	let colors_palette = [];
 	let serie_properties = {};
 	let customBars = false;
-
+	let use_full_name = true;
+	
 	/* Go throught each serie */
 	tsOptionsArray.forEach((tsOptions, i) => {
 		/* Format the data */
@@ -342,8 +343,7 @@ function tsArrayToOptions(tsOptionsArray, tsGroupsArray, tsCompare) {
 				if (ts_info.ext_label) {
 					name = ts_info.ext_label
 				}
-
-				const serie_name = getSerieName(name, ts_id, tsGroupsArray[i], true)
+				const serie_name = getSerieName(name, ts_id, tsGroupsArray[i], use_full_name)
 				/* Add the serie label to the array of the labels */
 				serie_labels.push(serie_name);
 
@@ -355,7 +355,7 @@ function tsArrayToOptions(tsOptionsArray, tsGroupsArray, tsCompare) {
 				/* Adding the extra timeseries, 30m ago, avg and 95th */
 				if (extra_timeseries?.avg == true) {
 					/* Add the serie label to the array of the labels */
-					const avg_label = getSerieName(name + " Avg", ts_id, tsGroupsArray[i], true)
+					const avg_label = getSerieName(name + " Avg", ts_id, tsGroupsArray[i], use_full_name)
 					serie_labels.push(avg_label);
 
 					serie_properties[avg_label] = {}
@@ -365,7 +365,7 @@ function tsArrayToOptions(tsOptionsArray, tsGroupsArray, tsCompare) {
 
 				if (extra_timeseries?.perc_95 == true) {
 					/* Add the serie label to the array of the labels */
-					const perc_label = getSerieName(name + " 95th Perc", ts_id, tsGroupsArray[i], true);
+					const perc_label = getSerieName(name + " 95th Perc", ts_id, tsGroupsArray[i], use_full_name);
 					serie_labels.push(perc_label);
 
 					serie_properties[perc_label] = {}
@@ -374,7 +374,7 @@ function tsArrayToOptions(tsOptionsArray, tsGroupsArray, tsCompare) {
 				}
 				if (extra_timeseries?.past == true) {
 					/* Add the serie label to the array of the labels */
-					const past_label = getSerieName(name + " " + tsCompare + " Ago", ts_id, tsGroupsArray[i], true);
+					const past_label = getSerieName(name + " " + tsCompare + " Ago", ts_id, tsGroupsArray[i], use_full_name);
 					serie_labels.push(past_label);
 
 					serie_properties[past_label] = {}
@@ -626,6 +626,70 @@ async function getTsChartsOptions(httpPrefix, epochStatus, tsCompare, timeseries
 	}
 	return tsChartsOptions;
 }
+
+/* Override Dygraph plugins to have a better legend */
+Dygraph.Plugins.Legend.prototype.select = function(e) {
+  var xValue = e.selectedX;
+  var points = e.selectedPoints;
+  var row = e.selectedRow;
+
+  var legendMode = e.dygraph.getOption('legend');
+  if (legendMode === 'never') {
+    this.legend_div_.style.display = 'none';
+    return;
+  }
+
+  var html = Dygraph.Plugins.Legend.generateLegendHTML(e.dygraph, xValue, points, this.one_em_width_, row);
+  if (html instanceof Node && html.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+    this.legend_div_.innerHTML = '';
+    this.legend_div_.appendChild(html);
+  } else
+    this.legend_div_.innerHTML = html;
+  // must be done now so offsetWidth isn’t 0…
+  this.legend_div_.style.display = '';
+
+  if (legendMode === 'follow') {
+    // create floating legend div
+    var area = e.dygraph.plotter_.area;
+    var labelsDivWidth = this.legend_div_.offsetWidth;
+    var yAxisLabelWidth = e.dygraph.getOptionForAxis('axisLabelWidth', 'y');
+    // find the closest data point by checking the currently highlighted series,
+    // or fall back to using the first data point available
+    var highlightSeries = e.dygraph.getHighlightSeries()
+    var point;
+    if (highlightSeries) {
+      point = points.find(p => p.name === highlightSeries);
+      if (!point)
+        point = points[0];
+    } else
+      point = points[0];
+		
+    // determine floating [left, top] coordinates of the legend div
+    // within the plotter_ area
+    // offset 50 px to the right and down from the first selection point
+    // 50 px is guess based on mouse cursor size
+    const followOffsetX = e.dygraph.getNumericOption('legendFollowOffsetX');
+    var leftLegend = point.x * area.w + followOffsetX;
+    
+		// if legend floats to end of the chart area, it flips to the other
+    // side of the selection point
+    if ((leftLegend + labelsDivWidth + 1) > area.w) {
+      leftLegend = leftLegend - 2 * followOffsetX - labelsDivWidth - (yAxisLabelWidth - area.x);
+    }
+
+    this.legend_div_.style.left = yAxisLabelWidth + leftLegend + "px";
+		document.addEventListener("mousemove", (e) => {
+			localStorage.setItem('timeseries-mouse-top-position', e.clientY + 50 + "px")
+		});
+    this.legend_div_.style.top = localStorage.getItem('timeseries-mouse-top-position');
+  } else if (legendMode === 'onmouseover' && this.is_generated_div_) {
+    // synchronise this with Legend.prototype.predraw below
+    var area = e.dygraph.plotter_.area;
+    var labelsDivWidth = this.legend_div_.offsetWidth;
+    this.legend_div_.style.left = area.x + area.w - labelsDivWidth - 1 + "px";
+    this.legend_div_.style.top = area.y + "px";
+  }
+};
 
 const timeseriesUtils = function () {
 	return {

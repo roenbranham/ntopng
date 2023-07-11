@@ -766,8 +766,8 @@ function flow_alert_store:format_record(value, no_html)
    end
 
    record[RNAME.INFO.name] = {
-      descr = format_external_link(value["info"], value["info"], no_html, proto, "no_external_link_url"),
-      value = flow_domain, -- Domain name used for alert exclusion
+      label = value["info"],
+      value = value["info"], 
       issuerdn = flow_tls_issuerdn, -- IssuerDN used for alert exclusion
    }
 
@@ -962,6 +962,10 @@ function flow_alert_store:format_record(value, no_html)
          ternary(show_cli_port, tostring(value["cli_port"]), ''), op_suffix,
          ternary(show_srv_port, tostring(value["srv_port"]), ''), op_suffix,
          l4_protocol, op_suffix)
+
+      if vlan then
+        href = href .. string.format('&vlan_id=%s%s', vlan.value, op_suffix)
+      end
 
       record[RNAME.LINK_TO_PAST_FLOWS.name] = href
    end

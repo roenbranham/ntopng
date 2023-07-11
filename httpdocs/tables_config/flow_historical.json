@@ -37,7 +37,7 @@
 		"title_i18n": "db_search.duration",
 	    "data_field": "duration",
 	    "sortable": true,
-	    "class": ["no-wrap"]
+	    "class": ["no-wrap text-center"]
 	},
 	{
 	    "title_i18n": "db_search.l4proto",
@@ -78,6 +78,7 @@
 	    "title_i18n": "db_search.packets",
 	    "data_field": "packets",
 	    "sortable": true,
+	    "render_type": "full_number",
 	    "style": "text-align:right;",
 	    "class": ["no-wrap"]
 	},

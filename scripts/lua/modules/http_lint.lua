@@ -1778,6 +1778,13 @@ local known_parameters = {
 
     ["telegram_channel"] = http_lint.validateEmptyOr(http_lint.validateSingleWord),
     ["telegram_token"] = http_lint.validateEmptyOr(http_lint.validateSingleWord),
+    ["thehive_token"] = http_lint.validateEmptyOr(http_lint.validateSingleWord),
+    ["thehive_url"] = {http_lint.webhookCleanup, http_lint.validateUnquoted},
+    ["thehive_org_name"] = http_lint.validateSingleWord,
+    ["thehive_obs_mail"] = http_lint.validateSingleWord,
+    ["thehive_obs_url"] = {http_lint.webhookCleanup, http_lint.validateUnquoted},
+
+
 
     ["fail2ban_jail"] = http_lint.validateEmptyOr(http_lint.validateSingleWord),
 
@@ -1847,6 +1854,15 @@ local known_parameters = {
     ["role"] = validateListOfTypeInline(validateFilters(validateSingleWord)), -- attacker/victim
     ["role_cli_srv"] = validateListOfTypeInline(validateFilters(validateSingleWord)), -- client/server
     ["l7_error_id"] = validateListOfTypeInline(validateFilters(validateNumber)), -- client/server
+    ["http_method"] = validateListOfTypeInline(validateFilters(validateSingleWord)), -- client/server
+    ["http_return"] = validateListOfTypeInline(validateFilters(validateNumber)), -- client/server
+    ["http_url"] = validateListOfTypeInline(validateFilters(validateSingleWord)), -- client/server
+    ["user_agent"] = validateListOfTypeInline(validateFilters(validateSingleWord)), -- client/server
+    ["netbios_name"] = validateListOfTypeInline(validateFilters(validateSingleWord)), -- client/server
+    ["mdns_answer"] = validateListOfTypeInline(validateFilters(validateSingleWord)), -- client/server
+    ["mdns_name"] = validateListOfTypeInline(validateFilters(validateSingleWord)), -- client/server
+    ["mdns_name_txt"] = validateListOfTypeInline(validateFilters(validateSingleWord)), -- client/server
+    ["mdns_ssid"] = validateListOfTypeInline(validateFilters(validateSingleWord)), -- client/server
     ["confidence"] = validateListOfTypeInline(validateFilters(validateNumber)), -- client/server
     ["acknowledged"] = validateListOfTypeInline(validateFilters(validateSingleWord)), -- acknowledged
     ["community_id"] = validateListOfTypeInline(validateFilters(validateSingleWord)), -- Community ID
@@ -2162,6 +2178,7 @@ local known_parameters = {
     ["email_sender"] = validateSingleWord,
     ["email_recipient"] = validateSingleWord,
     ["smtp_server"] = validateServer,
+    ["smtp_port"] = validatePortRange,
     ["smtp_username"] = validateEmptyOr(validateSingleWord),
     ["smtp_password"] = validateEmptyOr(validatePassword),
     ["influx_dbname"] = validateSingleWord,
@@ -2341,6 +2358,7 @@ local known_parameters = {
     ["old_interface_name"] = validateGatewayName,
     ["delete_gateway"] = validateGatewayName,
     ["ping_address"] = validateIPV4,
+    ["flowdev_ip"] = validateIPV4,
     ["policy_name"] = validateRoutingPolicyName,
     ["old_policy_name"] = validateRoutingPolicyName,
     ["delete_policy"] = validateRoutingPolicyName,

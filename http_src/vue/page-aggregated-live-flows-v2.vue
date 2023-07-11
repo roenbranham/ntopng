@@ -27,6 +27,7 @@
 			       :f_get_column_classes="get_column_classes"
 			       :f_is_column_sortable="is_column_sortable"
 			       :enable_search="true"
+                   :display_empty_rows="true"
 			       :paging="true">
                         </Table>
                     </div>
@@ -288,10 +289,13 @@ function get_table_columns_config() {
     if (props.vlans.length > 0) {
         columns.push({
             columnName: i18n("vlan"), targets: 0, name: 'vlan_id', data: 'vlan_id', className: 'text-nowrap text-center', responsivePriority: 1, render: (data) => {
-                if (data.id === 0)
-                    return ``
-                else
+                if (data.id === 0 || data.id == undefined) {
+                    const label = i18n('no_vlan')
+                    return `<a href="${http_prefix}/lua/flows_stats.lua?vlan=0">${label}</a>`
+                }
+                else{
                     return `<a href="${http_prefix}/lua/flows_stats.lua?vlan=${data.id}">${data.label}</a>`
+                }
             }
         });
     }

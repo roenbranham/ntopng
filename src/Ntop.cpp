@@ -448,6 +448,10 @@ void Ntop::registerPrefs(Prefs *_prefs, bool quick_registration) {
   }
 
 #ifdef NTOPNG_PRO
+  /* 
+     This check is required when starting ntopng without --version
+     but it's redundant when --version is used
+  */
   pro->init_license();
 
   if (!ntop->getPro()->has_unlimited_enterprise_l_license())

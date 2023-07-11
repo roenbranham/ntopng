@@ -2122,6 +2122,21 @@ static int ntop_radius_accounting_stop(lua_State *vm) {
 
 /* ****************************************** */
 
+static int ntop_get_hosts_by_service(lua_State *vm) {
+   NetworkInterface *ntop_interface = getCurrentInterface(vm);
+
+  lua_newtable(vm);
+
+  if (!ntop_interface)
+    return (ntop_lua_return_value(vm, __FUNCTION__, CONST_LUA_ERROR));
+
+  ntop_interface->getHostsByService(vm);
+
+  return (ntop_lua_return_value(vm, __FUNCTION__, CONST_LUA_OK));
+}
+
+/* ****************************************** */
+
 static int ntop_radius_accounting_update(lua_State *vm) {
   bool res = false;
 
@@ -5169,6 +5184,7 @@ static int ntop_interface_update_ip_reassignment(lua_State *vm) {
 
 static int ntop_interface_trigger_traffic_alert(lua_State *vm) {
   u_int32_t frequency_sec, threshold, value;
+  bool t_sign = true;
   char *metric, *ipaddress, ip_buf[64], *host_ip, *tmp;
   NetworkInterface *ntop_interface = getCurrentInterface(vm);
   bool rc = false;
@@ -5192,6 +5208,10 @@ static int ntop_interface_trigger_traffic_alert(lua_State *vm) {
   if (ntop_lua_check(vm, __FUNCTION__, 5, LUA_TNUMBER) != CONST_LUA_OK)
     return (ntop_lua_return_value(vm, __FUNCTION__, CONST_LUA_ERROR));
   value = (u_int32_t)lua_tointeger(vm, 5);
+
+  if (ntop_lua_check(vm, __FUNCTION__, 6, LUA_TBOOLEAN) != CONST_LUA_OK)
+    return (ntop_lua_return_value(vm, __FUNCTION__, CONST_LUA_ERROR));
+  t_sign = (u_int32_t)lua_toboolean(vm, 6);
 
   snprintf(ip_buf, sizeof(ip_buf), "%s", ipaddress);
   host_ip = strtok_r(ipaddress, "@", &tmp);
@@ -5244,7 +5264,7 @@ static int ntop_interface_trigger_traffic_alert(lua_State *vm) {
         /* Build new alert */
         alert = new TrafficVolumeAlert(
             host_check_traffic_volume, h, CLIENT_FULL_RISK_PERCENTAGE,
-            std::string(metric), frequency_sec, threshold, value);
+            std::string(metric), frequency_sec, threshold, value, t_sign);
         if (alert) {
           /* Specify when the alert will auto-release if not continuously
            * triggered */
@@ -5420,6 +5440,7 @@ static luaL_Reg _ntop_interface_reg[] = {
     { "radiusAccountingStart", ntop_radius_accounting_start },
     { "radiusAccountingStop", ntop_radius_accounting_stop },
     { "radiusAccountingUpdate", ntop_radius_accounting_update },
+    { "getHostsByService", ntop_get_hosts_by_service }, 
 
     /* Addresses */
     {"getAddressInfo", ntop_get_address_info},

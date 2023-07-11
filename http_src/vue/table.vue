@@ -65,13 +65,13 @@
 	</tr>
       </thead>
       <tbody>
-	<tr v-if="!changing_column_visibility" v-for="row in active_rows">
+	<tr v-if="!changing_column_visibility && !changing_rows" v-for="row in active_rows">
 	  <template v-for="(col, col_index) in columns_wrap">
 	    <td v-if="col.visible" scope="col" class="">
 	      <div v-if="print_html_row != null && print_html_row(col.data, row, true) != null" :class="col.classes" class="wrap-column" :style="col.style" v-html="print_html_row(col.data, row)">
 	      </div>
-	      <div :style="col.style" style="" class="wrap-column margin-sm" :class="col.classes">
-		<VueNode v-if="print_vue_node_row != null && print_vue_node_row(col.data, row, vue_obj, true) != null" :content="print_vue_node_row(col.data, row, vue_obj)"></VueNode>
+	      <div :style="col.style" style="" class="wrap-column margin-sm" :class="col.classes" >
+		<VueNode v-if="print_vue_node_row != null && print_vue_node_row(col.data, row, vue_obj, true) != null" :content="print_vue_node_row(col.data, row, vue_obj)" ></VueNode>
 	      </div>	      
 	    </td>
 	  </template>
@@ -164,6 +164,8 @@ const select_table_page = ref(null);
 const loading = ref(false);
 const query_info = ref(null);
 const query_info_sql_button = ref(null);
+const changing_column_visibility = ref(false);
+const changing_rows = ref(false);
 
 onMounted(async () => {
     if (props.columns != null) {
@@ -184,7 +186,6 @@ async function load_table() {
     emit("loaded");
 }
 
-const changing_column_visibility = ref(false);
 async function change_columns_visibility(col) {
     changing_column_visibility.value = true;
     col.visible = !col.visible;
@@ -297,7 +298,7 @@ function redraw_select_pages() {
 
 async function change_active_page(new_active_page) {
     active_page = new_active_page;
-    if (props.paging == true) {
+    if (props.paging == true || force_refresh) {
 	await set_rows();
     } else {
 	set_active_rows();
@@ -337,12 +338,17 @@ function get_sort_function() {
     };
 }
 
-function refresh_table() {
+let force_refresh = false;
+async function refresh_table() {
+    force_refresh = true;
     select_table_page.value.change_active_page(0, 0);
+    await nextTick();
+    force_refresh = false;
 }
 
 let first_get_rows = true;
 async function set_rows() {
+    changing_rows.value = true;
     loading.value = true;
     let res = await props.get_rows(active_page, per_page.value, columns_wrap.value, map_search.value, first_get_rows);
     query_info.value = null;
@@ -357,6 +363,7 @@ async function set_rows() {
     rows = res.rows;
     set_active_rows();    
     loading.value = false;
+    changing_rows.value = false;
 }
 
 function is_column_sortable(col) {
@@ -393,7 +400,11 @@ function copy_query_into_clipboard($event) {
     NtopUtils.copyToClipboard(query_info.value.query, query_info_sql_button.value);
 }
 
-defineExpose({ load_table, refresh_table });
+function get_columns_defs() {
+    return columns_wrap.value;
+}
+
+defineExpose({ load_table, refresh_table, get_columns_defs });
 
 </script>
 

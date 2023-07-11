@@ -861,6 +861,11 @@ function driver:timeseries_query(options)
         options.tags.host = nil
     end
 
+    -- It seems that host is added when asking for subnet
+    if (starts(options.schema, "subnet")) then
+        options.tags.host = nil
+    end
+
     local retention_policy = getSchemaRetentionPolicy(options.schema_info, options.epoch_begin, options.epoch_end,
         options)
     local query_schema, raw_step, data_type = retentionPolicyToSchema(options.schema_info, retention_policy, self.db)
@@ -1491,6 +1496,12 @@ function driver:timeseries_top(options, top_tags)
     local time_step = ts_common.calculateSampledTimeStep(raw_step, options.epoch_begin, options.epoch_end, options)
     local sorted = {}
     local top_series = {}
+    local id = "bytes"
+    local num_point = 0
+
+    if ends(options.schema, "packets") then
+        id = "packets"
+    end
 
     for idx in pairsByValues(res, rev) do
         local value = data.values[idx]
@@ -1517,6 +1528,7 @@ function driver:timeseries_top(options, top_tags)
             local total_serie = {}
 
             for _, values in pairs(top_serie.series or {}) do
+                num_point = #values.data
                 for index, serie_point in pairs(values.data or {}) do
                     if not total_serie[index] then
                         total_serie[index] = 0
@@ -1532,13 +1544,20 @@ function driver:timeseries_top(options, top_tags)
             local snmp_utils = require "snmp_utils"
             local snmp_cached_dev = require "snmp_cached_dev"
             local cached_device = snmp_cached_dev:create(options.tags.device)
-            local ifindex = query_tag.if_index
-            local id = shortenString(snmp_utils.get_snmp_interface_label(cached_device["interfaces"][ifindex]), 64)
+            -- In case of flow exporters the data is port, in case of snmp it's if_index
+            local ifindex = query_tag.if_index or query_tag.port
+            local ext_label = nil
+            if cached_device then
+                ext_label = shortenString(snmp_utils.get_snmp_interface_label(cached_device["interfaces"][ifindex]), 32)
+                if isEmptyString(ext_label) then
+                    ext_label = ifindex
+                end
+            end
 
             sorted[#sorted + 1] = {
                 statistics = statistics,
-                id = "bytes",
-                ext_label = id,
+                id = id,
+                ext_label = ext_label,
                 type = "line",
                 data = total_serie
             }
@@ -1547,6 +1566,7 @@ function driver:timeseries_top(options, top_tags)
 
     return {
         metadata = {
+            num_point = num_point,
             epoch_begin = options.epoch_begin,
             epoch_end = options.epoch_end,
             epoch_step = time_step,

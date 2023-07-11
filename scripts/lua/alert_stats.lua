@@ -777,6 +777,7 @@ if(status == "engaged") then
    table.insert(notes, i18n("show_alerts.engaged_notes"))
 end
 
+
 local context_2 = {
    ifid = ifid,
    opsep = tag_utils.SEPARATOR,
@@ -792,6 +793,10 @@ local context_2 = {
    show_acknowledge_all =  (page ~= 'all') and (status == "historical"),
    show_delete_all = (page ~= 'all') and (status ~= "engaged"),
    show_actions = (page ~= 'all'),
+
+   download ={
+      endpoint = download_endpoint_list,
+   },
    actions = {
        show_settings = (page ~= 'system') and isAdministrator(),
        show_flows = (page == 'host'),

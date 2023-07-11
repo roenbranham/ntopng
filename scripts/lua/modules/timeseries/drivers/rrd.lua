@@ -904,22 +904,33 @@ function driver:timeseries_top(options, top_tags)
 
     local top_series = {}
     local count = 0
+    local id = "bytes"
+
+    if ends(options.schema, "packets") then
+        id = "packets"
+    end
 
     for top_item, value in pairsByValues(available_items, rev) do
         if value > 0 then
             local snmp_utils = require "snmp_utils"
             local snmp_cached_dev = require "snmp_cached_dev"
             local cached_device = snmp_cached_dev:create(options.tags.device)
-            local ifindex = available_tags[top_item][1].if_index
-            local id = shortenString(snmp_utils.get_snmp_interface_label(cached_device["interfaces"][ifindex]), 64)
+            local ifindex = available_tags[top_item][1].if_index or available_tags[top_item][1].port
+            local ext_label = nil
+            if cached_device then
+                ext_label = shortenString(snmp_utils.get_snmp_interface_label(cached_device["interfaces"][ifindex]), 32)
+                if isEmptyString(ext_label) then
+                    ext_label = ifindex
+                end
+            end
 
             count = table.len(available_series[top_item].data)
             top_series[#top_series + 1] = {
                 data = available_series[top_item].data,
-                id = "bytes",
+                id = id,
                 type = "line",
                 statistics = available_series[top_item].statistics,
-                ext_label = id
+                ext_label = ext_label
             }
         end
 

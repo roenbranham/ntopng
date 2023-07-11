@@ -5,24 +5,39 @@
 <template>
   <div class="row">
     <div class="col-md-12 col-lg-12">
-      <h2 class="ms-3">{{ title }}</h2>
       <div class="card  card-shadow">
         <div class="card-body">
-          <div class="row mb-4 mt-4" id="host_details_traffic">
-            <template v-for="chart_option in chart_options">
-              <div class="col-4">
-                <h3 class="widget-name">{{ chart_option.title }}</h3>
-                <Chart
-                  :id="chart_option.id"
-                  :chart_type="chart_option.type"
-                  :base_url_request="chart_option.url"
-                  :register_on_status_change="false">
-                </Chart>
-              </div>
-            </template>
+          <TabList ref="inactive_hosts_tab_list" id="inactive_hosts_tab_list" :tab_list="tab_list"
+            @click_item="change_show_charts">
+          </TabList>
+          <!--
+          <div class="card card-shadow">
+            <div class="card-body p-1">
+              <transition name="component-fade" mode="out-in">
+                <div key="1" v-if="show_charts == true" class="row mb-4 mt-4" id="host_details_traffic">
+                  
+                </div>
+              </transition>
+            </div>
           </div>
+          <div class="text-center" style="cursor: pointer;" @click="change_show_charts">
+            <i v-if="show_charts == false" class="fa-solid fa-angles-down"></i>
+            <i v-else class="fa-solid fa-angles-up"></i>
+          </div>
+          -->
           <div>
-            <TableWithConfig ref="table_inactive_hosts" :table_id="table_id" :csrf="csrf"
+            <div key="1" v-if="show_charts == true" class="row mb-4 mt-4" id="host_details_traffic">
+              <template v-if="show_charts == true" v-for="chart_option in chart_options">
+                <div class="col-4">
+                  <h3 class="widget-name">{{ chart_option.title }}</h3>
+                  <Chart :ref="chart_option.ref" :id="chart_option.id" :chart_type="chart_option.type"
+                    :base_url_request="chart_option.url" :register_on_status_change="true">
+                  </Chart>
+                </div>
+              </template>
+            </div>
+
+            <TableWithConfig v-else ref="table_inactive_hosts" :table_id="table_id" :csrf="csrf"
               :f_map_columns="map_table_def_columns" :get_extra_params_obj="get_extra_params_obj"
               @custom_event="on_table_custom_event">
               <template v-slot:custom_header>
@@ -44,6 +59,8 @@
           <div class="card-footer mt-3">
             <button type="button" ref="delete_all" @click="delete_all_entries" class="btn btn-danger me-1"><i
                 class='fas fa-trash'></i> {{ _i18n("delete_all_entries") }}</button>
+            <button type="button" ref="delete_older" @click="delete_entries_since" class="btn btn-danger me-1"><i
+                class='fas fa-trash'></i> {{ _i18n("delete_older") }}</button>
             <button type="button" ref="download" @click="download" class="btn btn-primary me-1"><i
                 class='fas fa-download'></i></button>
           </div>
@@ -52,6 +69,8 @@
     </div>
   </div>
   <ModalDeleteInactiveHost ref="modal_delete" :context="context" @delete_host="refresh_table"></ModalDeleteInactiveHost>
+  <ModalDeleteInactiveHostEpoch ref="modal_delete_older" :context="context" @delete_host="refresh_table">
+  </ModalDeleteInactiveHostEpoch>
   <ModalDownloadInactiveHost ref="modal_download" :context="context"></ModalDownloadInactiveHost>
 </template>
 
@@ -61,7 +80,9 @@ import { default as TableWithConfig } from "./table-with-config.vue";
 import { default as Dropdown } from "./dropdown.vue";
 import { default as Spinner } from "./spinner.vue";
 import { default as Chart } from "./chart.vue";
+import { default as TabList } from "./tab-list.vue";
 import { default as ModalDeleteInactiveHost } from "./modal-delete-inactive-host.vue";
+import { default as ModalDeleteInactiveHostEpoch } from "./modal-delete-inactive-host-epoch.vue";
 import { default as ModalDownloadInactiveHost } from "./modal-download-inactive-host.vue";
 
 const _i18n = (t) => i18n(t);
@@ -73,6 +94,14 @@ const filter_table_dropdown_array = ref([]);
 const table_inactive_hosts = ref();
 const modal_download = ref();
 const modal_delete = ref();
+const modal_delete_older = ref();
+const chart_1 = ref();
+const chart_2 = ref();
+const chart_3 = ref();
+const show_charts = ref(false);
+const inactive_hosts_tab_list = ref();
+const applications_tab = ref();
+const change_applications_tab_event = "change_applications_tab_event";
 const props = defineProps({
   ifid: Number,
   csrf: String,
@@ -84,18 +113,21 @@ const context = ref({
 })
 const chart_options = [
   {
+    ref: chart_1,
     title: i18n('active_inactive'),
     type: ntopChartApex.typeChart.DONUT,
     url: `${http_prefix}/lua/rest/v2/get/host/inactive/active_inactive.lua`,
     id: `active_inactive_distro`,
   },
   {
+    ref: chart_2,
     title: i18n('inactivity_period'),
     type: ntopChartApex.typeChart.DONUT,
     url: `${http_prefix}/lua/rest/v2/get/host/inactive/inactivity_period.lua`,
     id: `inactivity_period`,
   },
   {
+    ref: chart_3,
     title: i18n('manufacturer'),
     type: ntopChartApex.typeChart.DONUT,
     url: `${http_prefix}/lua/rest/v2/get/host/inactive/inactive_manufacturer.lua`,
@@ -103,9 +135,25 @@ const chart_options = [
   },
 ]
 
+const tab_list = ref([
+  {
+    title: i18n('table_view'),
+    active: (show_charts.value == false),
+    id: "table"
+  },
+  {
+    title: i18n('chart_view'),
+    active: (show_charts.value == true),
+    id: "chart"
+  },
+])
+
 /* ************************************** */
 
 onMounted(async () => {
+  ntopng_events_manager.on_custom_event("change_applications_tab_event", change_applications_tab_event, (tab) => {
+    ntopng_url_manager.set_key_to_url('view', tab.id);
+  });
   load_table_filters_overview();
 });
 
@@ -182,12 +230,31 @@ function add_table_filter(opt, event) {
   ntopng_url_manager.set_key_to_url(opt.key, `${opt.value}`);
   set_filter_array_label();
   table_inactive_hosts.value.refresh_table();
+  if (show_charts.value == true) {
+    chart_options.forEach((el) => {
+      el.ref.value[0].update_chart()
+    })
+  }
 }
 
 /* ************************************** */
 
 function refresh_table() {
   table_inactive_hosts.value.refresh_table();
+}
+
+/* ************************************** */
+
+function change_show_charts(item) {
+  show_charts.value = !show_charts.value;
+  tab_list.value.forEach((i) => {
+    i.active = false;
+    if(i.id == "table" && show_charts.value == false)
+      i.active = true;
+    else if(i.id == "chart" && show_charts.value == true)
+      i.active = true;
+  });
+  ntopng_events_manager.emit_custom_event(change_applications_tab_event, item);
 }
 
 /* ************************************** */
@@ -225,6 +292,12 @@ function delete_all_entries() {
 
 /* ************************************** */
 
+function delete_entries_since() {
+  modal_delete_older.value.show();
+}
+
+/* ************************************** */
+
 function download() {
   modal_download.value.show();
 }
@@ -233,7 +306,10 @@ function download() {
 
 function click_button_historical_flows(event) {
   const row = event.row;
-  window.location.href = `${http_prefix}/lua/pro/db_search.lua?epoch_begin=${row.epoch_begin - 100}&epoch_end=${row.epoch_end + 100}&ip=${row.ip_address.value || row.ip_address};eq&mac=${row.mac_address.value || row.mac_address};eq`;
+  let vlan = ''
+  if(row.vlan != 0)
+    vlan = `@${row.vlan}`
+  window.location.href = `${http_prefix}/lua/pro/db_search.lua?epoch_begin=${row.epoch_begin - 100}&epoch_end=${row.epoch_end + 100}&ip=${row.ip_address.value || row.ip_address}${vlan};eq&mac=${row.mac_address.value || row.mac_address};eq`;
 }
 
 /* ************************************** */

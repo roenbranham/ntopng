@@ -27,7 +27,7 @@ function inactive_hosts_utils.getInactiveHosts(ifid, filters)
             local host_info = json.decode(host_info_json)
             local mac_manufacturer = ntop.getMacManufacturer(host_info.mac) or {}
 
-            for filter, value in pairs(filters) do
+            for filter, value in pairs(filters or {}) do
                 if filter == "manufacturer" then
                     if mac_manufacturer.short ~= value then
                         goto skip
@@ -46,6 +46,7 @@ function inactive_hosts_utils.getInactiveHosts(ifid, filters)
             host_list[#host_list + 1] = {
                 ip_address = host_info.ip,
                 mac_address = host_info.mac,
+                host = host_info.ip .. "@" .. host_info.vlan,
                 vlan = getFullVlanName(host_info.vlan),
                 vlan_id = host_info.vlan,
                 name = host_info.name,
@@ -86,11 +87,42 @@ end
 
 -- ##########################################
 
-function inactive_hosts_utils.getInactiveHostsNumber(ifid)
+function inactive_hosts_utils.getInactiveHostsNumber(ifid, filters)
     local redis_hash = string.format(OFFLINE_LOCAL_HOSTS_KEY, ifid)
     local available_keys = ntop.getHashKeysCache(redis_hash) or {}
+    local count = 0
 
-    return table.len(available_keys)
+    if filters then
+        local redis_hash = string.format(OFFLINE_LOCAL_HOSTS_KEY, ifid)
+        local available_keys = ntop.getHashKeysCache(redis_hash) or {}
+
+        for redis_key, _ in pairs(available_keys) do
+            local host_info_json = ntop.getHashCache(redis_hash, redis_key)
+
+            if not isEmptyString(host_info_json) then
+                local host_info = json.decode(host_info_json)
+                local last_seen = host_info.last_seen
+                local mac_manufacturer = ntop.getMacManufacturer(host_info.mac) or {}
+
+                for filter, value in pairs(filters) do
+                    if filter == "manufacturer" then
+                        if mac_manufacturer.short ~= value then
+                            goto skip
+                        end
+                    elseif tostring(host_info[filter]) ~= tostring(value) then
+                        goto skip
+                    end
+                end
+
+                count = count + 1
+                ::skip::
+            end
+        end
+    else
+        count = table.len(available_keys)
+    end
+
+    return count
 end
 
 -- ##########################################
@@ -136,7 +168,7 @@ function inactive_hosts_utils.getVLANFilters(ifid)
     table.insert(rsp, 1, {
         key = "vlan_id",
         value = "",
-        label = i18n('flows_page.all_vlan_ids')
+        label = i18n('all')
     })
 
     return rsp
@@ -185,7 +217,7 @@ function inactive_hosts_utils.getNetworkFilters(ifid)
     table.insert(rsp, 1, {
         key = "network",
         value = "",
-        label = i18n('flows_page.all_networks')
+        label = i18n('all')
     })
 
     return rsp
@@ -230,7 +262,7 @@ function inactive_hosts_utils.getDeviceFilters(ifid)
     table.insert(rsp, 1, {
         key = "device_type",
         value = "",
-        label = i18n('all_devices')
+        label = i18n('all')
     })
 
     return rsp
@@ -239,7 +271,7 @@ end
 -- ##########################################
 
 -- This function return a list of available manufacturer filters
-function inactive_hosts_utils.getManufacturerFilters(ifid)
+function inactive_hosts_utils.getManufacturerFilters(ifid, filters)
     local redis_hash = string.format(OFFLINE_LOCAL_HOSTS_KEY, ifid)
     local available_keys = ntop.getHashKeysCache(redis_hash) or {}
     local manufacturer_list = {}
@@ -253,11 +285,27 @@ function inactive_hosts_utils.getManufacturerFilters(ifid)
             local mac_manufacturer = ntop.getMacManufacturer(host_info.mac) or {}
             local tmp = mac_manufacturer.short
 
-            if not (manufacturer_list[tmp]) then
-                manufacturer_list[tmp] = 1
-            else
-                manufacturer_list[tmp] = manufacturer_list[tmp] + 1
+            if filters then
+                for filter, value in pairs(filters) do
+                    if filter == "manufacturer" then
+                        if mac_manufacturer.short ~= value then
+                            goto skip
+                        end
+                    elseif tostring(host_info[filter]) ~= tostring(value) then
+                        goto skip
+                    end
+                end
             end
+
+            if tmp then
+                if not (manufacturer_list[tmp]) then
+                    manufacturer_list[tmp] = 1
+                else
+                    manufacturer_list[tmp] = manufacturer_list[tmp] + 1
+                end
+            end
+
+            ::skip::
         end
     end
 
@@ -273,7 +321,7 @@ function inactive_hosts_utils.getManufacturerFilters(ifid)
     table.insert(rsp, 1, {
         key = "manufacturer",
         value = "",
-        label = i18n('all_manufacturer')
+        label = i18n('all')
     })
 
     return rsp
@@ -284,10 +332,13 @@ end
 function inactive_hosts_utils.deleteAllEntries(ifid)
     local redis_hash = string.format(OFFLINE_LOCAL_HOSTS_KEY, ifid)
     local available_keys = ntop.getHashKeysCache(redis_hash) or {}
+    local num_hosts_deleted = table.len(available_keys)
 
     for redis_key, _ in pairs(available_keys) do
         ntop.delHashCache(redis_hash, redis_key)
     end
+
+    return num_hosts_deleted
 end
 
 -- ##########################################
@@ -295,19 +346,24 @@ end
 function inactive_hosts_utils.deleteAllEntriesSince(ifid, epoch)
     local redis_hash = string.format(OFFLINE_LOCAL_HOSTS_KEY, ifid)
     local available_keys = ntop.getHashKeysCache(redis_hash) or {}
+    local num_hosts_deleted = 0
 
     for redis_key, _ in pairs(available_keys) do
         local host_info_json = ntop.getHashCache(redis_hash, redis_key)
 
         if isEmptyString(host_info_json) then
             ntop.delHashCache(redis_hash, redis_key)
+            num_hosts_deleted = num_hosts_deleted + 1
         end
 
         local host_info = json.decode(host_info_json)
         if host_info.last_seen < epoch then
+            num_hosts_deleted = num_hosts_deleted + 1
             ntop.delHashCache(redis_hash, redis_key)
         end
     end
+    
+    return num_hosts_deleted
 end
 
 -- ##########################################
@@ -315,6 +371,7 @@ end
 function inactive_hosts_utils.deleteSingleEntry(ifid, redis_key)
     local redis_hash = string.format(OFFLINE_LOCAL_HOSTS_KEY, ifid)
     ntop.delHashCache(redis_hash, redis_key)
+    return 1 -- Number of hosts deleted
 end
 
 -- ##########################################
@@ -466,7 +523,7 @@ end
 --  - day
 --  - week
 --  - older
-function inactive_hosts_utils.getInactiveHostsEpochDistribution(ifid)
+function inactive_hosts_utils.getInactiveHostsEpochDistribution(ifid, filters)
     local redis_hash = string.format(OFFLINE_LOCAL_HOSTS_KEY, ifid)
     local available_keys = ntop.getHashKeysCache(redis_hash) or {}
     local epoch_list = {
@@ -487,6 +544,17 @@ function inactive_hosts_utils.getInactiveHostsEpochDistribution(ifid)
         if not isEmptyString(host_info_json) then
             local host_info = json.decode(host_info_json)
             local last_seen = host_info.last_seen
+            local mac_manufacturer = ntop.getMacManufacturer(host_info.mac) or {}
+
+            for filter, value in pairs(filters or {}) do
+                if filter == "manufacturer" then
+                    if mac_manufacturer.short ~= value then
+                        goto skip
+                    end
+                elseif tostring(host_info[filter]) ~= tostring(value) then
+                    goto skip
+                end
+            end
 
             if last_seen >= one_hour_epoch then
                 -- newer then one hour
@@ -501,10 +569,32 @@ function inactive_hosts_utils.getInactiveHostsEpochDistribution(ifid)
                 -- Older then one week
                 epoch_list.older = epoch_list.older + 1
             end
+
+            ::skip::
         end
     end
 
     return epoch_list
+end
+
+-- ##########################################
+
+function inactive_hosts_utils.getFilters()
+    local filters = {
+        vlan = _GET["vlan_id"],
+        network = _GET["network"],
+        device_type = _GET["device_type"],
+        manufacturer = _GET["manufacturer"],
+    }
+
+    -- Return the data
+    for filter, value in pairs(filters) do
+        if isEmptyString(value) then
+            filters[filter] = nil
+        end
+    end
+
+    return filters
 end
 
 -- ##########################################

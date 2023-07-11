@@ -799,12 +799,6 @@ li>a>.fa-external-link-alt {
   vertical-align: middle;
 }
 
-.ntopng-external-link:hover {
-  overflow: visible;
-  white-space: normal;
-  height: auto;
-}
-
 .help {
   cursor: help;
 }
@@ -846,6 +840,7 @@ table.dataTable thead th.sorting_asc::after {
   z-index: 80 !important;
   box-shadow: 2px 2px 5px rgba(0, 0, 0, .3);
   border-radius: 3px;
+  position: fixed;
 }
 
 .dygraph-legend>span {
@@ -863,4 +858,12 @@ table.dataTable thead th.sorting_asc::after {
 .highlight {
   border-left: 2px solid #BABABA;
   padding-left: 3px !important;
+}
+
+.component-fade-enter-active, .component-fade-leave-active {
+  transition: opacity .3s ease;
+}
+.component-fade-enter, .component-fade-leave-to
+/* .component-fade-leave-active below version 2.1.8 */ {
+  opacity: 0;
 }
